@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>xsukax ClamAV Scanner</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; color: #333; }
+        .main-container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+        .app-header { background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%); color: #fff; padding: 24px; border-radius: 12px 12px 0 0; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .app-title { font-size: 28px; font-weight: bold; margin-bottom: 8px; display: flex; align-items: center; gap: 12px; }
+        .app-subtitle { font-size: 14px; color: #a0aec0; }
+        .shield-icon { width: 40px; height: 40px; background: linear-gradient(135deg, #48bb78 0%, #38a169 100%); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 24px; }
+        .content-wrapper { background: #fff; border-radius: 0 0 12px 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); overflow: hidden; }
+        .section { padding: 24px; border-bottom: 1px solid #e2e8f0; }
+        .section:last-child { border-bottom: none; }
+        .section-title { font-size: 18px; font-weight: 600; margin-bottom: 16px; color: #2d3748; display: flex; align-items: center; gap: 8px; }
+        .section-icon { width: 24px; height: 24px; background: #edf2f7; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 14px; }
+        .status-box { background: linear-gradient(135deg, #f7fafc 0%, #edf2f7 100%); border: 2px solid #cbd5e0; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+        .status-box.success { background: linear-gradient(135deg, #f0fff4 0%, #c6f6d5 100%); border-color: #48bb78; }
+        .status-box.error { background: linear-gradient(135deg, #fff5f5 0%, #fed7d7 100%); border-color: #f56565; }
+        .status-label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; color: #718096; }
+        .status-value { font-size: 16px; font-weight: 600; color: #2d3748; }
+        .btn { padding: 10px 20px; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; border: none; transition: all 0.2s; display: inline-flex; align-items: center; gap: 8px; margin-right: 8px; margin-bottom: 8px; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; box-shadow: 0 2px 4px rgba(102,126,234,0.4); }
+        .btn-primary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 8px rgba(102,126,234,0.5); }
+        .btn-success { background: linear-gradient(135deg, #48bb78 0%, #38a169 100%); color: #fff; box-shadow: 0 2px 4px rgba(72,187,120,0.4); }
+        .btn-success:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 8px rgba(72,187,120,0.5); }
+        .btn-danger { background: linear-gradient(135deg, #f56565 0%, #e53e3e 100%); color: #fff; box-shadow: 0 2px 4px rgba(245,101,101,0.4); }
+        .btn-danger:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 8px rgba(245,101,101,0.5); }
+        .btn-secondary { background: #edf2f7; color: #2d3748; }
+        .btn-secondary:hover:not(:disabled) { background: #e2e8f0; }
+        .btn-small { padding: 6px 12px; font-size: 12px; }
+        .file-input-wrapper { position: relative; display: inline-block; width: 100%; }
+        .file-input { opacity: 0; position: absolute; width: 100%; height: 100%; cursor: pointer; }
+        .file-input-label { display: block; padding: 40px 20px; border: 2px dashed #cbd5e0; border-radius: 8px; text-align: center; background: #f7fafc; cursor: pointer; transition: all 0.2s; }
+        .file-input-label:hover { border-color: #667eea; background: #edf2f7; }
+        .file-input-label.active { border-color: #48bb78; background: #f0fff4; }
+        .scan-results { max-height: 400px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px; }
+        .scan-item { padding: 12px 16px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; }
+        .scan-item:last-child { border-bottom: none; }
+        .scan-item.threat { background: #fff5f5; }
+        .scan-item.clean { background: #f0fff4; }
+        .file-name { font-size: 13px; color: #2d3748; font-family: monospace; flex: 1; word-break: break-all; }
+        .scan-status { font-size: 12px; font-weight: 600; padding: 4px 12px; border-radius: 12px; white-space: nowrap; }
+        .scan-status.clean { background: #c6f6d5; color: #22543d; }
+        .scan-status.threat { background: #fed7d7; color: #742a2a; }
+        .progress-bar { width: 100%; height: 8px; background: #edf2f7; border-radius: 4px; overflow: hidden; margin-top: 12px; }
+        .progress-fill { height: 100%; background: linear-gradient(90deg, #667eea 0%, #764ba2 100%); width: 0%; transition: width 0.3s ease; }
+        .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 9999; }
+        .modal.hidden { display: none; }
+        .modal-content { background: #fff; border-radius: 12px; max-width: 800px; width: 90%; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
+        .modal-header { background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%); color: #fff; padding: 20px 24px; border-radius: 12px 12px 0 0; }
+        .modal-title { font-size: 20px; font-weight: 600; }
+        .modal-body { padding: 24px; }
+        .modal-footer { padding: 16px 24px; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; gap: 12px; }
+        .notification { position: fixed; top: 20px; right: 20px; background: #fff; border-radius: 8px; padding: 16px 20px; max-width: 400px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); z-index: 10000; display: flex; align-items: center; gap: 12px; animation: slideIn 0.3s ease-out; }
+        .notification.hidden { display: none; }
+        .notification.success { border-left: 4px solid #48bb78; }
+        .notification.error { border-left: 4px solid #f56565; }
+        .notification.info { border-left: 4px solid #4299e1; }
+        .notification-icon { font-size: 24px; }
+        .notification-content { flex: 1; }
+        .notification-title { font-size: 14px; font-weight: 600; margin-bottom: 2px; }
+        .notification-message { font-size: 13px; color: #4a5568; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 20px; }
+        .stat-card { background: linear-gradient(135deg, #f7fafc 0%, #edf2f7 100%); border-radius: 8px; padding: 16px; border: 1px solid #e2e8f0; }
+        .stat-label { font-size: 12px; color: #718096; margin-bottom: 4px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+        .stat-value { font-size: 24px; font-weight: bold; color: #2d3748; }
+        .spinner { width: 40px; height: 40px; border: 4px solid #edf2f7; border-top: 4px solid #667eea; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        @keyframes slideIn { from { transform: translateX(400px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        .db-list { background: #f7fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin-top: 16px; max-height: 300px; overflow-y: auto; }
+        .db-item { padding: 12px; margin-bottom: 8px; background: #fff; border: 1px solid #e2e8f0; border-radius: 6px; display: flex; justify-content: space-between; align-items: center; }
+        .db-item:last-child { margin-bottom: 0; }
+        .db-item.loaded { border-color: #48bb78; background: #f0fff4; }
+        .db-info { flex: 1; }
+        .db-name { font-size: 14px; font-weight: 600; color: #2d3748; margin-bottom: 4px; }
+        .db-stats { font-size: 12px; color: #718096; }
+        .db-source { font-size: 11px; color: #a0aec0; font-family: monospace; margin-top: 2px; }
+        .db-badge { padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; background: #c6f6d5; color: #22543d; }
+        .online-db-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 16px; margin-top: 16px; }
+        .online-db-item { padding: 20px; background: #f7fafc; border: 2px solid #e2e8f0; border-radius: 8px; transition: all 0.2s; }
+        .online-db-item:hover { border-color: #667eea; background: #edf2f7; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .online-db-header { display: flex; justify-content: space-between; align-items: start; margin-bottom: 12px; }
+        .online-db-title { font-size: 16px; font-weight: 700; color: #2d3748; }
+        .online-db-type { font-size: 11px; padding: 3px 10px; background: #667eea; color: #fff; border-radius: 4px; font-weight: 600; }
+        .online-db-desc { font-size: 13px; color: #4a5568; margin-bottom: 12px; line-height: 1.6; }
+        .online-db-size { font-size: 13px; color: #667eea; font-weight: 700; margin-bottom: 12px; }
+        .online-db-url { font-size: 11px; color: #a0aec0; font-family: monospace; word-break: break-all; margin-bottom: 16px; padding: 8px; background: #fff; border-radius: 4px; }
+        .info-box { background: #edf2f7; border-left: 4px solid #667eea; padding: 12px; margin: 16px 0; border-radius: 4px; }
+        .info-box-title { font-size: 13px; font-weight: 700; color: #2d3748; margin-bottom: 4px; }
+        .info-box-text { font-size: 12px; color: #4a5568; line-height: 1.6; }
+        .warning-box { background: #fffaf0; border-left: 4px solid #ed8936; padding: 12px; margin: 16px 0; border-radius: 4px; }
+        .warning-box-title { font-size: 13px; font-weight: 700; color: #c05621; margin-bottom: 4px; }
+        .warning-box-list { margin-left: 20px; margin-top: 8px; font-size: 12px; color: #744210; }
+        .extracted-files { background: #f0fff4; border: 1px solid #c6f6d5; padding: 8px; margin-top: 8px; border-radius: 4px; font-size: 11px; color: #276749; }
+        @media (max-width: 768px) { .main-container { padding: 10px; } .section { padding: 16px; } .stats-grid { grid-template-columns: 1fr; } .notification { right: 10px; max-width: calc(100% - 20px); } .online-db-list { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+    <div class="main-container">
+        <div class="app-header">
+            <div class="app-title">
+                <div class="shield-icon">🛡️</div>
+                <div>
+                    <div>xsukax ClamAV Scanner</div>
+                    <div class="app-subtitle">ClamAV Database Antivirus Engine - Powered by xsukax</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="content-wrapper">
+            <div class="section">
+                <div class="section-title">
+                    <div class="section-icon">📦</div>
+                    ClamAV Database Management
+                </div>
+                
+                <div class="status-box" id="sigStatusBox">
+                    <div class="status-label">Database Status</div>
+                    <div class="status-value" id="sigStatusText">No ClamAV databases loaded</div>
+                    <div style="font-size: 12px; color: #718096; margin-top: 8px;">
+                        💡 <strong>Supported:</strong> Official ClamAV CVD files (main.cvd & daily.cvd)
+                    </div>
+                    <div style="font-size: 12px; color: #718096; margin-top: 4px;">
+                        🚀 <strong>Quick Start:</strong> Download databases → Load them → Start scanning
+                    </div>
+                </div>
+
+                <div class="stats-grid" id="sigStats" style="display: none;">
+                    <div class="stat-card">
+                        <div class="stat-label">Loaded Databases</div>
+                        <div class="stat-value" id="dbCount">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Hash Signatures</div>
+                        <div class="stat-value" id="hashCount">0</div>
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px;">
+                    <button id="loadLocalBtn" class="btn btn-primary">📁 Load CVD Files from PC</button>
+                    <button id="downloadOnlineBtn" class="btn btn-success">🌐 Get Database Downloads</button>
+                    <button id="viewDbBtn" class="btn btn-secondary" disabled>👁️ View Loaded Databases</button>
+                    <button id="clearDbBtn" class="btn btn-danger" disabled>🗑️ Clear All Databases</button>
+                </div>
+
+                <div class="db-list" id="loadedDatabasesList" style="display: none;"></div>
+            </div>
+
+            <div class="section">
+                <div class="section-title">
+                    <div class="section-icon">🔍</div>
+                    File Scanner
+                </div>
+
+                <div class="file-input-wrapper">
+                    <input type="file" id="fileInput" class="file-input" multiple>
+                    <label for="fileInput" class="file-input-label" id="fileInputLabel">
+                        <div style="font-size: 48px; margin-bottom: 12px;">📄</div>
+                        <div style="font-size: 16px; font-weight: 600; margin-bottom: 8px;">Drop files here or click to browse</div>
+                        <div style="font-size: 13px; color: #718096;">Supports multiple files - Hash-based virus detection</div>
+                    </label>
+                </div>
+
+                <div style="margin-top: 16px; display: flex; gap: 12px; flex-wrap: wrap;">
+                    <button id="scanBtn" class="btn btn-success" disabled>🔍 Start Scan</button>
+                    <button id="clearResultsBtn" class="btn btn-secondary">🗑️ Clear Results</button>
+                </div>
+
+                <div id="scanProgress" style="display: none; margin-top: 16px;">
+                    <div style="font-size: 14px; color: #4a5568; margin-bottom: 8px;">
+                        <span id="progressText">Scanning files...</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="section-title">
+                    <div class="section-icon">📊</div>
+                    Scan Results
+                </div>
+
+                <div class="stats-grid" id="resultStats" style="display: none;">
+                    <div class="stat-card">
+                        <div class="stat-label">Files Scanned</div>
+                        <div class="stat-value" id="scannedCount">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Threats Found</div>
+                        <div class="stat-value" id="threatCount" style="color: #e53e3e;">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Clean Files</div>
+                        <div class="stat-value" id="cleanCount" style="color: #38a169;">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Detection Rate</div>
+                        <div class="stat-value" id="detectionRate">0%</div>
+                    </div>
+                </div>
+
+                <div class="scan-results" id="scanResults">
+                    <div style="padding: 40px 20px; text-align: center; color: #a0aec0;">
+                        <div style="font-size: 48px; margin-bottom: 12px;">🔍</div>
+                        <div style="font-size: 14px;">No scan results yet. Load ClamAV databases and scan files to begin.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="notification" class="notification hidden">
+        <div class="notification-icon" id="notifIcon"></div>
+        <div class="notification-content">
+            <div class="notification-title" id="notifTitle"></div>
+            <div class="notification-message" id="notifMessage"></div>
+        </div>
+    </div>
+
+    <div id="modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title" id="modalTitle"></div>
+            </div>
+            <div class="modal-body" id="modalBody"></div>
+            <div class="modal-footer">
+                <button id="modalCloseBtn" class="btn btn-secondary">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        const CLAMAV_DATABASES = [
+            {
+                name: 'ClamAV Main Database',
+                type: 'CVD',
+                url: 'http://database.clamav.net/main.cvd',
+                description: 'Core ClamAV virus database containing primary malware signatures maintained by Cisco Talos.',
+                source: 'ClamAV Official (Cisco Talos)',
+                size: '~100 MB',
+                signatures: '~4,000,000'
+            },
+            {
+                name: 'ClamAV Daily Database',
+                type: 'CVD',
+                url: 'http://database.clamav.net/daily.cvd',
+                description: 'Daily updated signatures for the latest threats, zero-day malware, and emerging viruses.',
+                source: 'ClamAV Official (Cisco Talos)',
+                size: '~50 MB',
+                signatures: '~3,000,000'
+            }
+        ];
+
+        const yieldToBrowser = () => new Promise(resolve => {
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    setTimeout(resolve, 0);
+                });
+            });
+        });
+
+        class CVDExtractor {
+            static async extractCVD(arrayBuffer) {
+                const view = new DataView(arrayBuffer);
+                const header = new Uint8Array(arrayBuffer, 0, 512);
+                const headerText = new TextDecoder().decode(header);
+                
+                if (!headerText.startsWith('ClamAV-VDB:')) {
+                    throw new Error('Invalid CVD file format. Please use official ClamAV CVD files.');
+                }
+
+                const tarGzData = new Uint8Array(arrayBuffer, 512);
+                
+                try {
+                    const decompressed = pako.inflate(tarGzData);
+                    const files = this.parseTar(decompressed);
+                    return files;
+                } catch (error) {
+                    throw new Error(`Failed to extract CVD archive: ${error.message}`);
+                }
+            }
+
+            static parseTar(data) {
+                const files = [];
+                let offset = 0;
+                
+                while (offset < data.length) {
+                    const header = data.slice(offset, offset + 512);
+                    const fileName = new TextDecoder().decode(header.slice(0, 100)).replace(/\0.*$/g, '');
+                    
+                    if (!fileName) break;
+                    
+                    const sizeOctal = new TextDecoder().decode(header.slice(124, 136)).trim().replace(/\0.*$/g, '');
+                    const fileSize = parseInt(sizeOctal, 8);
+                    
+                    if (isNaN(fileSize) || fileSize < 0) break;
+                    
+                    const fileData = data.slice(offset + 512, offset + 512 + fileSize);
+                    
+                    if (fileName.endsWith('.hdb') || fileName.endsWith('.ndb') || 
+                        fileName.endsWith('.mdb') || fileName.endsWith('.hsb') ||
+                        fileName.endsWith('.msb') || fileName.endsWith('.ldb')) {
+                        files.push({
+                            name: fileName,
+                            data: new TextDecoder().decode(fileData)
+                        });
+                    }
+                    
+                    offset += 512 + Math.ceil(fileSize / 512) * 512;
+                }
+                
+                return files;
+            }
+        }
+
+        class ClamAVScanner {
+            constructor() {
+                this.databases = [];
+                this.totalHashSigs = 0;
+            }
+
+            async loadCVDFile(file, source = 'local') {
+                try {
+                    if (!file.name.endsWith('.cvd') && !file.name.endsWith('.cld')) {
+                        throw new Error('Only ClamAV CVD/CLD files are supported. Please download official databases.');
+                    }
+                    
+                    const arrayBuffer = await file.arrayBuffer();
+                    const extractedFiles = await CVDExtractor.extractCVD(arrayBuffer);
+                    
+                    let hashSignatures = new Map();
+                    
+                    for (const extracted of extractedFiles) {
+                        const lines = extracted.data.split('\n');
+                        
+                        for (const line of lines) {
+                            const trimmed = line.trim();
+                            if (!trimmed || trimmed.startsWith('#')) continue;
+
+                            if (trimmed.includes(':')) {
+                                const parts = trimmed.split(':');
+                                if (parts.length >= 3) {
+                                    const hash = parts[0];
+                                    const size = parts[1];
+                                    const name = parts[2];
+                                    
+                                    if (hash.length === 32 || hash.length === 40 || hash.length === 64) {
+                                        hashSignatures.set(hash.toLowerCase(), {
+                                            name: name,
+                                            size: parseInt(size) || 0,
+                                            database: file.name,
+                                            subfile: extracted.name
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    const dbEntry = {
+                        name: file.name,
+                        source: source,
+                        extractedFiles: extractedFiles.map(f => f.name),
+                        hashSignatures: hashSignatures,
+                        signatureCount: hashSignatures.size
+                    };
+
+                    this.databases.push(dbEntry);
+                    this.totalHashSigs += hashSignatures.size;
+
+                    return dbEntry;
+                } catch (error) {
+                    throw new Error(`Failed to load ${file.name}: ${error.message}`);
+                }
+            }
+
+            async scanFile(file) {
+                if (this.databases.length === 0) {
+                    throw new Error('No ClamAV databases loaded. Please load CVD files first.');
+                }
+
+                const arrayBuffer = await file.arrayBuffer();
+
+                const md5 = await this.calculateMD5(arrayBuffer);
+                const sha1 = await this.calculateSHA1(arrayBuffer);
+                const sha256 = await this.calculateSHA256(arrayBuffer);
+
+                for (const db of this.databases) {
+                    if (db.hashSignatures.has(md5)) {
+                        const sig = db.hashSignatures.get(md5);
+                        return {
+                            infected: true,
+                            signature: sig,
+                            matchType: 'MD5',
+                            database: db.name
+                        };
+                    }
+
+                    if (db.hashSignatures.has(sha1)) {
+                        const sig = db.hashSignatures.get(sha1);
+                        return {
+                            infected: true,
+                            signature: sig,
+                            matchType: 'SHA1',
+                            database: db.name
+                        };
+                    }
+
+                    if (db.hashSignatures.has(sha256)) {
+                        const sig = db.hashSignatures.get(sha256);
+                        return {
+                            infected: true,
+                            signature: sig,
+                            matchType: 'SHA256',
+                            database: db.name
+                        };
+                    }
+                }
+
+                return { infected: false };
+            }
+
+            async calculateMD5(arrayBuffer) {
+                const wordArray = CryptoJS.lib.WordArray.create(arrayBuffer);
+                const hash = CryptoJS.MD5(wordArray);
+                return hash.toString();
+            }
+
+            async calculateSHA1(arrayBuffer) {
+                const hashBuffer = await crypto.subtle.digest('SHA-1', arrayBuffer);
+                const hashArray = Array.from(new Uint8Array(hashBuffer));
+                return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+            }
+
+            async calculateSHA256(arrayBuffer) {
+                const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
+                const hashArray = Array.from(new Uint8Array(hashBuffer));
+                return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+            }
+
+            clearAll() {
+                this.databases = [];
+                this.totalHashSigs = 0;
+            }
+
+            getStats() {
+                return {
+                    dbCount: this.databases.length,
+                    hashCount: this.totalHashSigs
+                };
+            }
+        }
+
+        const scanner = new ClamAVScanner();
+        let selectedFiles = [];
+        let scanResults = [];
+
+        function showNotification(title, message, type = 'info') {
+            const notification = document.getElementById('notification');
+            const icon = document.getElementById('notifIcon');
+            const titleEl = document.getElementById('notifTitle');
+            const messageEl = document.getElementById('notifMessage');
+
+            const icons = {
+                success: '✅',
+                error: '❌',
+                info: 'ℹ️',
+                warning: '⚠️'
+            };
+
+            icon.textContent = icons[type] || icons.info;
+            titleEl.textContent = title;
+            messageEl.textContent = message;
+            notification.className = `notification ${type}`;
+
+            setTimeout(() => {
+                notification.classList.add('hidden');
+            }, 5000);
+        }
+
+        function showModal(title, body) {
+            document.getElementById('modalTitle').textContent = title;
+            document.getElementById('modalBody').innerHTML = body;
+            document.getElementById('modal').classList.remove('hidden');
+        }
+
+        function hideModal() {
+            document.getElementById('modal').classList.add('hidden');
+        }
+
+        function updateDatabaseStatus() {
+            const stats = scanner.getStats();
+            const statusBox = document.getElementById('sigStatusBox');
+            const statusText = document.getElementById('sigStatusText');
+            const sigStats = document.getElementById('sigStats');
+
+            if (stats.dbCount > 0) {
+                statusBox.classList.add('success');
+                statusText.textContent = `✅ ${stats.dbCount} ClamAV database(s) loaded - ${stats.hashCount.toLocaleString()} signatures active`;
+                
+                document.getElementById('dbCount').textContent = stats.dbCount;
+                document.getElementById('hashCount').textContent = stats.hashCount.toLocaleString();
+                
+                sigStats.style.display = 'grid';
+                document.getElementById('viewDbBtn').disabled = false;
+                document.getElementById('clearDbBtn').disabled = false;
+                document.getElementById('scanBtn').disabled = selectedFiles.length === 0;
+            } else {
+                statusBox.classList.remove('success');
+                statusText.textContent = 'No ClamAV databases loaded';
+                sigStats.style.display = 'none';
+                document.getElementById('viewDbBtn').disabled = true;
+                document.getElementById('clearDbBtn').disabled = true;
+                document.getElementById('scanBtn').disabled = true;
+            }
+        }
+
+        function updateLoadedDatabasesList() {
+            const list = document.getElementById('loadedDatabasesList');
+            
+            if (scanner.databases.length === 0) {
+                list.style.display = 'none';
+                return;
+            }
+
+            list.innerHTML = scanner.databases.map((db, index) => `
+                <div class="db-item loaded">
+                    <div class="db-info">
+                        <div class="db-name">
+                            ${index + 1}. ${db.name} 
+                            <span style="background: #667eea; color: white; padding: 2px 6px; border-radius: 3px; font-size: 10px; margin-left: 8px;">CVD</span>
+                        </div>
+                        <div class="db-stats">
+                            Signatures: ${db.signatureCount.toLocaleString()}
+                        </div>
+                        <div class="extracted-files">
+                            📦 Extracted files: ${db.extractedFiles.join(', ')}
+                        </div>
+                        <div class="db-source">Source: ${db.source}</div>
+                    </div>
+                    <div class="db-badge">ACTIVE</div>
+                </div>
+            `).join('');
+            
+            list.style.display = 'block';
+        }
+
+        function updateScanResults() {
+            const resultsDiv = document.getElementById('scanResults');
+            const resultStats = document.getElementById('resultStats');
+
+            if (scanResults.length === 0) {
+                resultsDiv.innerHTML = `
+                    <div style="padding: 40px 20px; text-align: center; color: #a0aec0;">
+                        <div style="font-size: 48px; margin-bottom: 12px;">🔍</div>
+                        <div style="font-size: 14px;">No scan results yet. Load ClamAV databases and scan files to begin.</div>
+                    </div>
+                `;
+                resultStats.style.display = 'none';
+                return;
+            }
+
+            const scanned = scanResults.length;
+            const threats = scanResults.filter(r => r.infected).length;
+            const clean = scanned - threats;
+            const detectionRate = scanned > 0 ? ((threats / scanned) * 100).toFixed(1) : 0;
+
+            document.getElementById('scannedCount').textContent = scanned;
+            document.getElementById('threatCount').textContent = threats;
+            document.getElementById('cleanCount').textContent = clean;
+            document.getElementById('detectionRate').textContent = `${detectionRate}%`;
+            resultStats.style.display = 'grid';
+
+            resultsDiv.innerHTML = scanResults.map(result => {
+                let statusText = '✅ CLEAN';
+                if (result.infected) {
+                    const dbName = result.database || 'Unknown';
+                    const subfile = result.signature?.subfile ? ` → ${result.signature.subfile}` : '';
+                    statusText = `⚠️ ${result.signature.name}<br><span style="font-size: 10px; opacity: 0.8;">${dbName}${subfile}</span>`;
+                }
+                
+                return `
+                <div class="scan-item ${result.infected ? 'threat' : 'clean'}">
+                    <div class="file-name">${result.fileName}</div>
+                    <div class="scan-status ${result.infected ? 'threat' : 'clean'}">
+                        ${statusText}
+                    </div>
+                </div>
+            `;
+            }).join('');
+        }
+
+        document.getElementById('loadLocalBtn').addEventListener('click', async () => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.cvd,.cld';
+            input.multiple = true;
+            
+            input.onchange = async (e) => {
+                const files = Array.from(e.target.files);
+                if (files.length === 0) return;
+
+                try {
+                    showModal('Loading ClamAV Databases', `
+                        <div style="text-align: center; padding: 20px;">
+                            <div class="spinner"></div>
+                            <div style="margin-top: 16px; font-size: 14px;" id="loadProgress">
+                                Processing ${files.length} CVD file(s)...
+                            </div>
+                        </div>
+                    `);
+
+                    let loaded = 0;
+                    for (const file of files) {
+                        const progressEl = document.getElementById('loadProgress');
+                        if (progressEl) {
+                            progressEl.innerHTML = `
+                                Extracting: <strong>${file.name}</strong> (${loaded + 1}/${files.length})
+                                <div style="color: #667eea; margin-top: 8px;">⏳ Parsing virus signatures...</div>
+                            `;
+                        }
+                        await yieldToBrowser();
+                        await scanner.loadCVDFile(file, 'local');
+                        loaded++;
+                    }
+                    
+                    hideModal();
+                    updateDatabaseStatus();
+                    updateLoadedDatabasesList();
+                    
+                    const stats = scanner.getStats();
+                    showNotification('Success', `Loaded ${loaded} CVD file(s) with ${stats.hashCount.toLocaleString()} signatures!`, 'success');
+                } catch (error) {
+                    hideModal();
+                    showNotification('Error', error.message, 'error');
+                }
+            };
+            
+            input.click();
+        });
+
+        document.getElementById('downloadOnlineBtn').addEventListener('click', () => {
+            const dbListHtml = CLAMAV_DATABASES.map((db) => `
+                <div class="online-db-item">
+                    <div class="online-db-header">
+                        <div class="online-db-title">${db.name}</div>
+                        <div class="online-db-type">${db.type}</div>
+                    </div>
+                    <div class="online-db-desc">${db.description}</div>
+                    <div class="online-db-size">
+                        📊 Size: ${db.size} | 🛡️ Signatures: ${db.signatures}
+                    </div>
+                    <div class="online-db-url">${db.url}</div>
+                    <a href="${db.url}" download="${db.name.replace(/\s+/g, '_')}.cvd" 
+                       class="btn btn-small btn-success" target="_blank">
+                        ⬇️ Download to PC
+                    </a>
+                </div>
+            `).join('');
+
+            showModal('Download ClamAV Databases', `
+                <div style="margin-bottom: 16px;">
+                    <strong style="font-size: 18px;">Official ClamAV Database Files</strong>
+                    <p style="font-size: 13px; color: #718096; margin-top: 8px;">
+                        Download official ClamAV CVD files maintained by Cisco Talos. These databases contain millions
+                        of virus signatures and are updated regularly with the latest threat intelligence.
+                    </p>
+                </div>
+                
+                <div class="warning-box">
+                    <div class="warning-box-title">📝 Download Instructions</div>
+                    <ol class="warning-box-list">
+                        <li>Click "Download to PC" for each database (large files, may take time)</li>
+                        <li>Wait for downloads to complete</li>
+                        <li>Close this dialog</li>
+                        <li>Click "Load CVD Files from PC"</li>
+                        <li>Select all downloaded .cvd files</li>
+                    </ol>
+                </div>
+                
+                <div class="info-box">
+                    <div class="info-box-title">💡 Recommended Setup</div>
+                    <div class="info-box-text">
+                        Download both <strong>main.cvd</strong> and <strong>daily.cvd</strong> for the best protection.
+                        Together they provide approximately <strong>7 million hash signatures</strong> covering viruses,
+                        trojans, malware, worms, and other threats.
+                    </div>
+                </div>
+                
+                <div class="online-db-list">${dbListHtml}</div>
+            `);
+        });
+
+        document.getElementById('viewDbBtn').addEventListener('click', () => {
+            const list = document.getElementById('loadedDatabasesList');
+            if (list.style.display === 'none') {
+                list.style.display = 'block';
+                document.getElementById('viewDbBtn').textContent = '🙈 Hide Databases';
+            } else {
+                list.style.display = 'none';
+                document.getElementById('viewDbBtn').textContent = '👁️ View Loaded Databases';
+            }
+        });
+
+        document.getElementById('clearDbBtn').addEventListener('click', () => {
+            if (confirm('Are you sure you want to clear all loaded ClamAV databases?')) {
+                scanner.clearAll();
+                updateDatabaseStatus();
+                updateLoadedDatabasesList();
+                showNotification('Cleared', 'All databases cleared successfully', 'info');
+            }
+        });
+
+        document.getElementById('fileInput').addEventListener('change', (e) => {
+            selectedFiles = Array.from(e.target.files);
+            const label = document.getElementById('fileInputLabel');
+            
+            if (selectedFiles.length > 0) {
+                label.classList.add('active');
+                label.innerHTML = `
+                    <div style="font-size: 48px; margin-bottom: 12px;">✅</div>
+                    <div style="font-size: 16px; font-weight: 600; margin-bottom: 8px;">${selectedFiles.length} file(s) selected</div>
+                    <div style="font-size: 13px; color: #718096;">Ready to scan with ${scanner.databases.length} ClamAV database(s)</div>
+                `;
+                document.getElementById('scanBtn').disabled = scanner.databases.length === 0;
+            }
+        });
+
+        document.getElementById('scanBtn').addEventListener('click', async () => {
+            if (scanner.databases.length === 0 || selectedFiles.length === 0) return;
+
+            scanResults = [];
+            updateScanResults();
+
+            document.getElementById('scanBtn').disabled = true;
+            document.getElementById('loadLocalBtn').disabled = true;
+            document.getElementById('scanProgress').style.display = 'block';
+
+            let scannedCount = 0;
+            const total = selectedFiles.length;
+
+            for (const file of selectedFiles) {
+                document.getElementById('progressText').textContent = 
+                    `Scanning ${file.name}... (${scannedCount + 1}/${total})`;
+                document.getElementById('progressFill').style.width = 
+                    `${((scannedCount / total) * 100)}%`;
+
+                await yieldToBrowser();
+
+                try {
+                    const result = await scanner.scanFile(file);
+                    scanResults.push({
+                        fileName: file.name,
+                        infected: result.infected,
+                        signature: result.signature || null,
+                        matchType: result.matchType || null,
+                        database: result.database || null
+                    });
+                } catch (error) {
+                    scanResults.push({
+                        fileName: file.name,
+                        infected: false,
+                        error: error.message
+                    });
+                }
+
+                scannedCount++;
+                updateScanResults();
+            }
+
+            document.getElementById('progressFill').style.width = '100%';
+            document.getElementById('progressText').textContent = `Scan complete - ${scannedCount} files scanned`;
+
+            setTimeout(() => {
+                document.getElementById('scanProgress').style.display = 'none';
+                document.getElementById('scanBtn').disabled = false;
+                document.getElementById('loadLocalBtn').disabled = false;
+
+                const threats = scanResults.filter(r => r.infected).length;
+                if (threats > 0) {
+                    showNotification('Threats Detected', `⚠️ Found ${threats} infected file(s)`, 'error');
+                } else {
+                    showNotification('Scan Complete', '✅ All files are clean', 'success');
+                }
+            }, 1000);
+        });
+
+        document.getElementById('clearResultsBtn').addEventListener('click', () => {
+            scanResults = [];
+            selectedFiles = [];
+            updateScanResults();
+            
+            const label = document.getElementById('fileInputLabel');
+            label.classList.remove('active');
+            label.innerHTML = `
+                <div style="font-size: 48px; margin-bottom: 12px;">📄</div>
+                <div style="font-size: 16px; font-weight: 600; margin-bottom: 8px;">Drop files here or click to browse</div>
+                <div style="font-size: 13px; color: #718096;">Supports multiple files - Hash-based virus detection</div>
+            `;
+            
+            document.getElementById('fileInput').value = '';
+            document.getElementById('scanBtn').disabled = true;
+            
+            showNotification('Results Cleared', 'Scan results have been cleared', 'info');
+        });
+
+        document.getElementById('modalCloseBtn').addEventListener('click', hideModal);
+
+        const dropZone = document.querySelector('.file-input-label');
+        
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                dropZone.classList.add('active');
+            });
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                dropZone.classList.remove('active');
+            });
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            const files = Array.from(e.dataTransfer.files);
+            if (files.length > 0) {
+                document.getElementById('fileInput').files = e.dataTransfer.files;
+                selectedFiles = files;
+                
+                dropZone.classList.add('active');
+                dropZone.innerHTML = `
+                    <div style="font-size: 48px; margin-bottom: 12px;">✅</div>
+                    <div style="font-size: 16px; font-weight: 600; margin-bottom: 8px;">${files.length} file(s) selected</div>
+                    <div style="font-size: 13px; color: #718096;">Ready to scan with ${scanner.databases.length} ClamAV database(s)</div>
+                `;
+                
+                document.getElementById('scanBtn').disabled = scanner.databases.length === 0;
+            }
+        });
+
+        document.addEventListener('DOMContentLoaded', () => {
+            showNotification('xsukax ClamAV Scanner Ready', 'Download official ClamAV databases to start scanning files', 'success');
+        });
+    </script>
+</body>
+</html>
